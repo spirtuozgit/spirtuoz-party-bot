@@ -1,29 +1,37 @@
-// rooms.js
+// Простое in-memory хранилище комнат
+// room_code → { ws_url, app_url, created_at }
 
 const rooms = new Map();
 
-/*
- room = {
-   room_code: "ABCD",
-   ws_url: "wss://xxxxx.trycloudflare.com/ws",
-   app_url: "https://spirtuoz-miniapp.vercel.app",
-   created_at: Date.now()
- }
-*/
+/**
+ * Получение комнаты
+ */
+export function getRoom(room_code) {
+  return rooms.get(room_code.toUpperCase()) || null;
+}
 
-export function registerRoom(room_code, ws_url, app_url) {
-  rooms.set(room_code, {
-    room_code,
+/**
+ * Регистрация комнаты
+ * Используется API /api/host/rooms/register
+ */
+export function setRoom(room_code, ws_url, app_url) {
+  const code = room_code.toUpperCase();
+
+  const room = {
+    room_code: code,
     ws_url,
     app_url,
     created_at: Date.now()
-  });
+  };
+
+  rooms.set(code, room);
+
+  return room;
 }
 
-export function getRoom(room_code) {
-  return rooms.get(room_code) || null;
-}
-
-export function deleteRoom(room_code) {
-  rooms.delete(room_code);
+/**
+ * Получить все комнаты (для дебага)
+ */
+export function getAllRooms() {
+  return Array.from(rooms.values());
 }
