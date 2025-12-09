@@ -1,51 +1,76 @@
-import { Telegraf } from "telegraf";
-import { getAvatar } from "./avatars.js";
-import { getRoom } from "./rooms.js";
+import express from "express";
+import cors from "cors";
+import bot from "./bot.js";
+import { setRoom, getRoom } from "./rooms.js";
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-/**
- * Формирует Telegram WebApp кнопку,
- * используя app_url ИЗ КОМНАТЫ
- */
-function miniAppButton(room) {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "🎮 Join Room",
-            web_app: {
-              url: `${room.app_url}?room=${room.room_code}`
-            }
-          }
-        ]
-      ]
-    }
-  };
-}
-
-bot.start((ctx) => {
-  ctx.reply("Введите код комнаты, чтобы войти.");
+// =========================
+// HEALTH CHECK
+// =========================
+app.get("/", (req, res) => {
+  res.send("Spirtuoz Party Bot is running.");
 });
 
-bot.on("text", async (ctx) => {
-  const code = ctx.message.text.trim().toUpperCase();
-  const room = getRoom(code);
+// =========================
+// HOST → REGISTER ROOM
+// =========================
+app.post("/api/host/rooms/register", (req, res) => {
+  const { room_code, ws_url, app_url, host_secret } = req.body;
 
-  if (!room) {
-    return ctx.reply("❌ Комната не найдена.");
+  if (host_secret !== process.env.HOST_SECRET) {
+    return res.status(401).json({ error: "Invalid host secret" });
   }
 
-  return ctx.reply(
-    `Комната ${code} найдена!`,
-    miniAppButton(room)
-  );
+  if (!room_code || !ws_url || !app_url) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
+
+  const room = setRoom(room_code, ws_url, app_url);
+
+  return res.json({ ok: true, room });
 });
 
-// Аватары
-bot.telegram.fetchAvatar = async (userId) => {
-  return await getAvatar(bot, userId);
-};
+// =========================
+// MiniApp → GET ROOM
+// =========================
+app.get("/api/rooms/:code", (req, res) => {
+  const room = getRoom(req.params.code);
 
-export default bot;
+  if (!room) {
+    return res.status(404).json({ error: "Room not found" });
+  }
+
+  return res.json(room);
+});
+
+// =========================
+// GET AVATAR
+// =========================
+app.get("/api/users/:id/avatar", async (req, res) => {
+  try {
+    const url = await bot.telegram.fetchAvatar(req.params.id);
+    res.json({ avatar: url });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load avatar" });
+  }
+});
+
+// =========================
+// TELEGRAM WEBHOOK
+// =========================
+
+app.use(bot.webhookCallback("/bot"));
+
+// =========================
+// START SERVER
+// =========================
+
+const PORT = process.env.PORT || 10000;
+
+app.listen(PORT, () => {
+  console.log("HTTP server running on port", PORT);
+});
